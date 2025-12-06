@@ -1,0 +1,44 @@
+services:
+  weeek-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: weeek-mcp-server
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # WEEEK API Token (REQUIRED)
+      - WEEEK_TOKEN=${WEEEK_TOKEN}
+      # Override or extend .env values if needed
+      - WEEEK_BASE_URL=${WEEEK_BASE_URL:-https://api.weeek.net/public/v1}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-30}
+      - RETRY_ATTEMPTS=${RETRY_ATTEMPTS:-3}
+      - RETRY_DELAY=${RETRY_DELAY:-1.0}
+      # SSE Server Configuration
+      - TRANSPORT=${TRANSPORT:-sse}
+      - SERVER_HOST=${SERVER_HOST:-0.0.0.0}
+      - SERVER_PORT=${SERVER_PORT:-3847}
+      # Authentication (REQUIRED for SSE mode)
+      - MCP_API_KEY=${MCP_API_KEY}
+    # Expose SSE port for network access
+    ports:
+      - "${SERVER_PORT:-3847}:3847"
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    # Health check (uses unauthenticated /health endpoint)
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3847/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
