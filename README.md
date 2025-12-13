@@ -12,8 +12,6 @@
 
 Weeek MCP Server — это полнофункциональный MCP сервер на Python, который интегрирует **все 71 endpoint** Weeek API v1 и предоставляет их как MCP tools для использования с AI-клиентами (Claude Desktop, Perplexity, собственные MCP-клиенты и др.).
 
-Если у вас есть пожелания или предложения -> [Мой Телеграм](https://t.me/Alek_Mel)
-
 ### Ключевые возможности
 
 - ✅ **71 инструмент** — полная интеграция всех endpoint'ов Weeek API
@@ -38,7 +36,7 @@ Weeek MCP Server — это полнофункциональный MCP серв�
 
 ```bash
 # Клонировать репозиторий
-git clone https://github.com/AlekMel/weeek-mcp-server.git
+git clone https://github.com/your-repo/weeek-mcp-server.git
 cd weeek-mcp-server
 
 # Создать виртуальное окружение
@@ -136,7 +134,7 @@ SERVER_PORT=3847
 1. **Подготовка VPS:**
 ```bash
 # Склонировать репозиторий на VPS
-git clone https://github.com/AlekMel/weeek-mcp-server.git
+git clone https://github.com/your-repo/weeek-mcp-server.git
 cd weeek-mcp-server
 
 # Создать .env файл
@@ -751,11 +749,11 @@ contacts = await mcp_client.call("list_contacts", {
 
 ## 🧪 Тестирование
 
-### Запуск тестов
+### Запуск интеграционных тестов
 
 ```bash
 # Установить токен и запустить тесты
-WEEEK_TOKEN="your-token" python test_server.py
+WEEEK_TOKEN="your-token" python tests/test_integration.py
 ```
 
 ### Чеклист тестирования
@@ -794,23 +792,24 @@ weeek-mcp-server/
 ├── docker-compose.yml        # Docker Compose конфигурация
 ├── .dockerignore             # Исключения для Docker
 ├── run_server.py             # Скрипт запуска
-├── test_server.py            # Тестовый скрипт
-└── src/
-    ├── __init__.py
-    ├── server.py             # MCP сервер
-    ├── weeek_client.py       # HTTP клиент
-    ├── config.py             # Конфигурация
-    ├── tools/                # Все MCP инструменты
-    │   ├── workspace_tools.py
-    │   ├── user_tools.py
-    │   ├── tag_tools.py
-    │   ├── task_tools.py
-    │   └── ...
-    ├── schemas/
-    │   └── models.py         # Pydantic модели
-    └── utils/
-        ├── errors.py         # Обработка ошибок
-        └── logger.py         # Логирование
+├── src/
+│   ├── __init__.py
+│   ├── server.py             # MCP сервер
+│   ├── weeek_client.py       # HTTP клиент
+│   ├── config.py             # Конфигурация
+│   ├── tools/                # Все MCP инструменты
+│   │   ├── workspace_tools.py
+│   │   ├── user_tools.py
+│   │   ├── tag_tools.py
+│   │   ├── task_tools.py
+│   │   └── ...
+│   ├── schemas/
+│   │   └── models.py         # Pydantic модели
+│   └── utils/
+│       ├── errors.py         # Обработка ошибок
+│       └── logger.py         # Логирование
+└── tests/
+    └── test_integration.py   # Интеграционные тесты
 ```
 
 ---

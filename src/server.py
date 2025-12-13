@@ -17,6 +17,7 @@ from mcp.server.fastmcp import FastMCP
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -148,6 +149,8 @@ def create_authenticated_sse_app(api_key: str) -> Starlette:
     app = Starlette(
         routes=base_app.routes,
         middleware=[
+            # Разрешить все хосты (или укажите конкретные: ["example.com", "localhost"])
+            Middleware(TrustedHostMiddleware, allowed_hosts=["*"]),
             Middleware(APIKeyAuthMiddleware, api_key=api_key)
         ],
         on_startup=base_app.on_startup if hasattr(base_app, 'on_startup') else None,
