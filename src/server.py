@@ -13,12 +13,12 @@ import asyncio
 import secrets
 from typing import Optional
 
+import json
+
 from mcp.server.fastmcp import FastMCP
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from .config import get_config, Config
@@ -126,9 +126,11 @@ class HostRewriteMiddleware:
         await self.app(scope, receive, send)
 
 
-class APIKeyAuthMiddleware(BaseHTTPMiddleware):
+class APIKeyAuthMiddleware:
     """
-    Middleware for API key authentication.
+    Pure ASGI middleware for API key authentication.
+    
+    Compatible with SSE streaming (unlike BaseHTTPMiddleware).
     
     Validates requests using either:
     - Authorization: Bearer <api_key>
@@ -136,17 +138,27 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
     """
     
     def __init__(self, app, api_key: str):
-        super().__init__(app)
+        self.app = app
         self.api_key = api_key
     
-    async def dispatch(self, request: Request, call_next):
-        # Allow health check endpoint without auth
-        if request.url.path in ["/health", "/healthz"]:
-            return await call_next(request)
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            # Pass through non-HTTP requests (websockets, lifespan, etc.)
+            await self.app(scope, receive, send)
+            return
         
-        # Extract API key from headers
-        auth_header = request.headers.get("Authorization", "")
-        x_api_key = request.headers.get("X-API-Key", "")
+        # Get path from scope
+        path = scope.get("path", "")
+        
+        # Allow health check endpoints without auth
+        if path in ["/health", "/healthz"]:
+            await self.app(scope, receive, send)
+            return
+        
+        # Extract headers
+        headers = dict(scope.get("headers", []))
+        auth_header = headers.get(b"authorization", b"").decode("utf-8")
+        x_api_key = headers.get(b"x-api-key", b"").decode("utf-8")
         
         provided_key = None
         
@@ -159,18 +171,33 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         
         # Validate API key using constant-time comparison
         if not provided_key or not secrets.compare_digest(provided_key, self.api_key):
-            logger.warning(
-                f"Unauthorized access attempt from {request.client.host if request.client else 'unknown'}"
-            )
-            return JSONResponse(
-                status_code=401,
-                content={
-                    "error": "Unauthorized",
-                    "message": "Invalid or missing API key. Use 'Authorization: Bearer <key>' or 'X-API-Key: <key>' header."
-                }
-            )
+            # Get client IP for logging
+            client = scope.get("client")
+            client_host = client[0] if client else "unknown"
+            logger.warning(f"Unauthorized access attempt from {client_host}")
+            
+            # Send 401 Unauthorized response
+            response_body = json.dumps({
+                "error": "Unauthorized",
+                "message": "Invalid or missing API key. Use 'Authorization: Bearer <key>' or 'X-API-Key: <key>' header."
+            }).encode("utf-8")
+            
+            await send({
+                "type": "http.response.start",
+                "status": 401,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(response_body)).encode()),
+                ],
+            })
+            await send({
+                "type": "http.response.body",
+                "body": response_body,
+            })
+            return
         
-        return await call_next(request)
+        # Auth passed, continue to app
+        await self.app(scope, receive, send)
 
 
 def create_authenticated_sse_app(api_key: str) -> Starlette:
