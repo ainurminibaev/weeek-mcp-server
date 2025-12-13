@@ -1,7 +1,7 @@
 services:
   weeek-mcp:
     # Используйте готовый образ с GitHub Container Registry:
-    image: ghcr.io/aleksmel/mcp_weeek_v2:latest
+    image: ghcr.io/aleksmel/weeek-mcp-server:latest
     # Или раскомментируйте для локальной сборки:
     # build:
     #   context: .
