@@ -1,16 +1,20 @@
 services:
   weeek-mcp:
-    # Используйте готовый образ с GitHub Container Registry:
+    # При указании и build, и image:
+    # - `docker compose up -d` — использует image если есть, иначе собирает
+    # - `docker compose up --build -d` — принудительная локальная сборка
+    # - `docker compose pull && docker compose up -d` — принудительно скачать image
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: ghcr.io/alekmel/weeek-mcp-server:latest
-    # Или раскомментируйте для локальной сборки:
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
     container_name: weeek-mcp-server
     restart: unless-stopped
     env_file:
       - .env
     environment:
+      # REQUIRED: Weeek API Token
+      - WEEEK_TOKEN=${WEEEK_TOKEN}
       # Override or extend .env values if needed
       - WEEEK_BASE_URL=${WEEEK_BASE_URL:-https://api.weeek.net/public/v1}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}

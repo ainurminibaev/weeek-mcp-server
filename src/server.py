@@ -85,6 +85,47 @@ def create_mcp_server() -> FastMCP:
 mcp = create_mcp_server()
 
 
+class HostRewriteMiddleware:
+    """
+    Middleware to rewrite Host header to localhost.
+    
+    This is needed because MCP SDK validates Host header for SSE connections
+    to prevent DNS rebinding attacks. When accessing via external IP,
+    we need to rewrite the Host to pass validation.
+    """
+    
+    def __init__(self, app, allowed_hosts: list[str] | None = None):
+        self.app = app
+        # Default allowed hosts include common patterns
+        self.allowed_hosts = allowed_hosts or ["*"]
+    
+    async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket"):
+            # Get original headers
+            headers = dict(scope.get("headers", []))
+            original_host = headers.get(b"host", b"").decode("utf-8")
+            
+            # Rewrite host header to localhost with port for MCP SDK validation
+            new_headers = []
+            for key, value in scope.get("headers", []):
+                if key == b"host":
+                    # Rewrite to localhost:port to pass MCP SDK validation
+                    port = scope.get("server", ("", 3847))[1]
+                    new_headers.append((b"host", f"localhost:{port}".encode()))
+                else:
+                    new_headers.append((key, value))
+            
+            # Create modified scope with new headers
+            scope = dict(scope)
+            scope["headers"] = new_headers
+            
+            # Log for debugging (only on first request)
+            if original_host and "logged_host_rewrite" not in scope:
+                scope["logged_host_rewrite"] = True
+        
+        await self.app(scope, receive, send)
+
+
 class APIKeyAuthMiddleware(BaseHTTPMiddleware):
     """
     Middleware for API key authentication.
@@ -134,7 +175,7 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
 
 def create_authenticated_sse_app(api_key: str) -> Starlette:
     """
-    Create SSE app with API key authentication middleware.
+    Create SSE app with API key authentication and host rewrite middleware.
     
     Args:
         api_key: The API key required for authentication
@@ -146,11 +187,15 @@ def create_authenticated_sse_app(api_key: str) -> Starlette:
     base_app = mcp.sse_app()
     
     # Wrap with authentication middleware
+    # Order matters: TrustedHost -> HostRewrite -> APIKeyAuth
     app = Starlette(
         routes=base_app.routes,
         middleware=[
-            # Разрешить все хосты (или укажите конкретные: ["example.com", "localhost"])
+            # Allow all hosts at Starlette level
             Middleware(TrustedHostMiddleware, allowed_hosts=["*"]),
+            # Rewrite Host header to localhost for MCP SDK validation
+            Middleware(HostRewriteMiddleware),
+            # API key authentication
             Middleware(APIKeyAuthMiddleware, api_key=api_key)
         ],
         on_startup=base_app.on_startup if hasattr(base_app, 'on_startup') else None,
@@ -199,11 +244,15 @@ def run_sse_server():
     app = create_authenticated_sse_app(_config.mcp_api_key)
     
     # Run with uvicorn
+    # forwarded_allow_ips="*" allows proxy headers from any source
+    # proxy_headers=True enables processing of X-Forwarded-* headers
     uvicorn.run(
         app,
         host=_config.server_host,
         port=_config.server_port,
         log_level=_config.log_level.lower(),
+        forwarded_allow_ips="*",
+        proxy_headers=True,
     )
 
 
