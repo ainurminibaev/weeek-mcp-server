@@ -1,0 +1,13 @@
+# Override для локальной разработки
+# Этот файл автоматически мержится с docker-compose.yml при запуске:
+#   docker compose up -d          — собирает из исходников
+#   docker compose up --build -d  — принудительная пересборка
+#
+# На VPS/Portainer этот файл НЕ нужен — там используется только image
+
+services:
+  weeek-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+

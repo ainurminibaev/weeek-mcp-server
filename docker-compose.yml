@@ -1,12 +1,8 @@
 services:
   weeek-mcp:
-    # При указании и build, и image:
-    # - `docker compose up -d` — использует image если есть, иначе собирает
-    # - `docker compose up --build -d` — принудительная локальная сборка
-    # - `docker compose pull && docker compose up -d` — принудительно скачать image
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # Готовый образ из GitHub Container Registry
+    # Для локальной сборки используйте: docker compose up --build -d
+    # (требуется docker-compose.override.yml с секцией build)
     image: ghcr.io/alekmel/weeek-mcp-server:latest
     container_name: weeek-mcp-server
     restart: unless-stopped
