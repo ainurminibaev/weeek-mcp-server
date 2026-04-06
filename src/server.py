@@ -17,12 +17,13 @@ import json
 
 from mcp.server.fastmcp import FastMCP
 from starlette.applications import Starlette
+from urllib.parse import parse_qs
 from starlette.middleware import Middleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import JSONResponse
 
 from .config import get_config, Config
-from .weeek_client import WeeekClient
+from .weeek_client import WeeekClient, weeek_token_var
 from .tools import register_all_tools
 from .utils.logger import setup_logging, get_logger
 
@@ -126,6 +127,31 @@ class HostRewriteMiddleware:
         await self.app(scope, receive, send)
 
 
+class WeeekTokenMiddleware:
+    """Extract X-Weeek-Token header and store in contextvar for per-request token."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket"):
+            headers = dict(scope.get("headers", []))
+            weeek_token = headers.get(b"x-weeek-token", b"").decode("utf-8")
+            # Also check query parameter (for Claude Desktop connector support)
+            if not weeek_token:
+                qs = parse_qs(scope.get("query_string", b"").decode("utf-8"))
+                if "weeek_token" in qs:
+                    weeek_token = qs["weeek_token"][0]
+            if weeek_token:
+                tok = weeek_token_var.set(weeek_token)
+                try:
+                    await self.app(scope, receive, send)
+                finally:
+                    weeek_token_var.reset(tok)
+                return
+        await self.app(scope, receive, send)
+
+
 class APIKeyAuthMiddleware:
     """
     Pure ASGI middleware for API key authentication.
@@ -168,6 +194,12 @@ class APIKeyAuthMiddleware:
         # Check X-API-Key header
         elif x_api_key:
             provided_key = x_api_key
+        
+        # Check query parameter (for Claude Desktop connector support)
+        if not provided_key:
+            qs = parse_qs(scope.get("query_string", b"").decode("utf-8"))
+            if "api_key" in qs:
+                provided_key = qs["api_key"][0]
         
         # Validate API key using constant-time comparison
         if not provided_key or not secrets.compare_digest(provided_key, self.api_key):
@@ -213,28 +245,26 @@ def create_authenticated_sse_app(api_key: str) -> Starlette:
     # Get the base SSE app from FastMCP
     base_app = mcp.sse_app()
     
-    # Wrap with authentication middleware
-    # Order matters: TrustedHost -> HostRewrite -> APIKeyAuth
-    app = Starlette(
-        routes=base_app.routes,
-        middleware=[
-            # Allow all hosts at Starlette level
-            Middleware(TrustedHostMiddleware, allowed_hosts=["*"]),
-            # Rewrite Host header to localhost for MCP SDK validation
-            Middleware(HostRewriteMiddleware),
-            # API key authentication
-            Middleware(APIKeyAuthMiddleware, api_key=api_key)
-        ],
-        on_startup=base_app.on_startup if hasattr(base_app, 'on_startup') else None,
-        on_shutdown=base_app.on_shutdown if hasattr(base_app, 'on_shutdown') else None,
-    )
-    
-    # Add health check endpoint
-    @app.route("/health")
-    @app.route("/healthz")
+    from starlette.routing import Route
+
     async def health_check(request):
         return JSONResponse({"status": "healthy", "service": "weeek-mcp"})
-    
+
+    routes = list(base_app.routes) + [
+        Route("/health", health_check),
+        Route("/healthz", health_check),
+    ]
+
+    app = Starlette(
+        routes=routes,
+        middleware=[
+            Middleware(TrustedHostMiddleware, allowed_hosts=["*"]),
+            Middleware(HostRewriteMiddleware),
+            Middleware(APIKeyAuthMiddleware, api_key=api_key),
+            Middleware(WeeekTokenMiddleware),
+        ],
+    )
+
     return app
 
 

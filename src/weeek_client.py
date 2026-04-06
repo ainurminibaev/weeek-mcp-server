@@ -11,6 +11,10 @@ from typing import Any, Optional, Dict, Union
 from pathlib import Path
 
 import httpx
+from contextvars import ContextVar
+
+# Per-request token override (set by WeeekTokenMiddleware)
+weeek_token_var: ContextVar[str] = ContextVar('weeek_token_var', default='')
 
 from .config import Config, get_config
 from .utils.errors import (
@@ -71,7 +75,7 @@ class WeeekClient:
         except Exception:
             # If config loading fails, use provided values or defaults
             if not token:
-                raise ValueError("WEEEK_TOKEN must be provided or set in environment")
+                pass  # Token comes from X-Weeek-Token header at runtime
             self._token = token
             self._base_url = base_url or "https://api.weeek.net/public/v1"
             self._timeout = timeout or 30
@@ -184,6 +188,13 @@ class WeeekClient:
                     request_kwargs["json"] = json_data
                     request_kwargs["headers"] = {"Content-Type": "application/json"}
                 
+                # Override token from contextvar if set
+                _ctx_token = weeek_token_var.get()
+                if _ctx_token:
+                    if "headers" not in request_kwargs:
+                        request_kwargs["headers"] = {}
+                    request_kwargs["headers"]["Authorization"] = f"Bearer {_ctx_token}"
+
                 response = await client.request(**request_kwargs)
                 
                 logger.debug(

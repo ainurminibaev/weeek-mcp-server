@@ -19,8 +19,8 @@ class Config(BaseSettings):
     
     # Weeek API Configuration
     weeek_token: str = Field(
-        ...,
-        description="Weeek API Bearer token for authentication"
+        default="",
+        description="Weeek API Bearer token (optional when using X-Weeek-Token header)"
     )
     weeek_base_url: str = Field(
         default="https://api.weeek.net/public/v1",
@@ -89,12 +89,7 @@ class Config(BaseSettings):
     @field_validator("weeek_token")
     @classmethod
     def validate_token(cls, v: str) -> str:
-        """Validate that token is not empty or placeholder."""
-        if not v or v == "your-api-token-here-1234567890":
-            raise ValueError(
-                "WEEEK_TOKEN must be set to a valid API token. "
-                "Get your token from Weeek Settings → API"
-            )
+        """Token is optional when using X-Weeek-Token header."""
         return v
     
     @field_validator("weeek_base_url")

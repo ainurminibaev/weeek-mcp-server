@@ -1,0 +1,15 @@
+services:
+  weeek:
+    build: ./server
+    container_name: weeek-mcp
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3847:3847"
+    environment:
+      - WEEEK_BASE_URL=https://api.weeek.net/public/v1
+      - TRANSPORT=sse
+      - HOST=0.0.0.0
+      - PORT=3847
+      - MCP_API_KEY=${MCP_API_KEY}
+      - REQUEST_TIMEOUT=30
+      - LOG_LEVEL=INFO
