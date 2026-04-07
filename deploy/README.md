@@ -127,7 +127,11 @@ claude mcp add weeek-marusya \
 
 Claude Desktop connector UI не поддерживает кастомные заголовки. Используем `mcp-remote` как мост.
 
-Отредактируй `~/Library/Application Support/Claude/claude_desktop_config.json`:
+**Требуется:** Node.js ([nodejs.org](https://nodejs.org), проверка: `node -v`).
+
+#### macOS
+
+Файл конфига: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
 ```json
 {
@@ -148,7 +152,30 @@ Claude Desktop connector UI не поддерживает кастомные з�
 }
 ```
 
-**Требуется:** Node.js (`node -v` для проверки).
+#### Windows
+
+Файл конфига: `%APPDATA%\Claude\claude_desktop_config.json`
+
+На Windows используй `npx.cmd` вместо `npx`:
+
+```json
+{
+  "mcpServers": {
+    "weeek-marusya": {
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://yourdomain.com/sse",
+        "--header",
+        "Authorization: Bearer YOUR_MCP_API_KEY",
+        "--header",
+        "X-Weeek-Token: YOUR_WEEEK_TOKEN"
+      ]
+    }
+  }
+}
+```
 
 После сохранения — перезапустить Claude Desktop.
 
@@ -174,7 +201,9 @@ Claude Desktop connector UI не поддерживает кастомные з�
 
 ## Multi-workspace: несколько пространств через один сервер
 
-Каждый пользователь передаёт свой `X-Weeek-Token`. Один сервер, разные workspace:
+Каждый пользователь передаёт свой `X-Weeek-Token`. Один сервер, разные workspace.
+
+#### macOS
 
 ```json
 {
@@ -200,6 +229,10 @@ Claude Desktop connector UI не поддерживает кастомные з�
   }
 }
 ```
+
+#### Windows
+
+То же самое, но `"command": "npx.cmd"` вместо `"command": "npx"`.
 
 ---
 
