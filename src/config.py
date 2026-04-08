@@ -48,9 +48,9 @@ class Config(BaseSettings):
     )
     
     # Server Configuration (SSE mode)
-    transport: Literal["stdio", "sse"] = Field(
+    transport: Literal["stdio", "sse", "streamable-http"] = Field(
         default="stdio",
-        description="Transport mode: 'stdio' for local, 'sse' for network access"
+        description="Transport mode: 'stdio' for local, 'sse' for network (legacy), 'streamable-http' for network (recommended)"
     )
     server_host: str = Field(
         default="0.0.0.0",

@@ -4,9 +4,10 @@ Weeek MCP Server - Main entry point.
 This module initializes and runs the MCP server that exposes
 all Weeek API endpoints as MCP tools using FastMCP.
 
-Supports two transport modes:
+Supports three transport modes:
 - stdio: For local MCP clients (Cursor, Claude Desktop, etc.)
-- sse: For network access via HTTP (n8n, remote clients, etc.)
+- sse: For network access via HTTP SSE (legacy)
+- streamable-http: For network access via Streamable HTTP (recommended)
 """
 
 import asyncio
@@ -268,41 +269,73 @@ def create_authenticated_sse_app(api_key: str) -> Starlette:
     return app
 
 
-def run_sse_server():
+def create_authenticated_streamable_app(api_key: str) -> Starlette:
     """
-    Run the MCP server in SSE mode using uvicorn.
-    
-    This allows network access to the MCP server via HTTP SSE transport.
-    Useful for remote clients like n8n, web applications, etc.
-    
+    Create Streamable HTTP app with API key authentication.
+
+    Streamable HTTP is more reliable than SSE — each tool call is
+    a single HTTP request/response, no persistent connection needed.
+    Must preserve base_app's lifespan for task group initialization.
+    """
+    base_app = mcp.streamable_http_app()
+
+    from starlette.routing import Route
+
+    async def health_check(request):
+        return JSONResponse({"status": "healthy", "service": "weeek-mcp"})
+
+    routes = list(base_app.routes) + [
+        Route("/health", health_check),
+        Route("/healthz", health_check),
+    ]
+
+    # Preserve base_app's lifespan — required for MCP session manager initialization
+    app = Starlette(
+        routes=routes,
+        lifespan=base_app.router.lifespan_context,
+        middleware=[
+            Middleware(TrustedHostMiddleware, allowed_hosts=["*"]),
+            Middleware(HostRewriteMiddleware),
+            Middleware(APIKeyAuthMiddleware, api_key=api_key),
+            Middleware(WeeekTokenMiddleware),
+        ],
+    )
+
+    return app
+
+
+def run_http_server():
+    """
+    Run the MCP server in network mode using uvicorn.
+
+    Supports both SSE and Streamable HTTP transports.
+    Streamable HTTP is preferred — more reliable, no persistent connections.
+
     Requires MCP_API_KEY to be set for authentication.
     """
     import uvicorn
-    
-    # Validate API key is set for SSE mode
+
     if not _config.mcp_api_key:
-        logger.error("MCP_API_KEY is required when running in SSE mode!")
-        logger.error("Set MCP_API_KEY environment variable to secure your server.")
-        raise ValueError(
-            "MCP_API_KEY must be set when TRANSPORT=sse. "
-            "This protects your server from unauthorized access."
-        )
-    
+        logger.error("MCP_API_KEY is required for network transport!")
+        raise ValueError("MCP_API_KEY must be set for network transport.")
+
     if len(_config.mcp_api_key) < 16:
         logger.warning("MCP_API_KEY is too short! Recommended minimum length is 32 characters.")
-    
-    logger.info(f"Starting SSE server on {_config.server_host}:{_config.server_port}")
-    logger.info(f"SSE endpoint: http://{_config.server_host}:{_config.server_port}/sse")
-    logger.info(f"Messages endpoint: http://{_config.server_host}:{_config.server_port}/messages")
+
+    transport = _config.transport
+
+    if transport == "streamable-http":
+        logger.info(f"Starting Streamable HTTP server on {_config.server_host}:{_config.server_port}")
+        logger.info(f"MCP endpoint: http://{_config.server_host}:{_config.server_port}/mcp")
+        app = create_authenticated_streamable_app(_config.mcp_api_key)
+    else:
+        logger.info(f"Starting SSE server on {_config.server_host}:{_config.server_port}")
+        logger.info(f"SSE endpoint: http://{_config.server_host}:{_config.server_port}/sse")
+        app = create_authenticated_sse_app(_config.mcp_api_key)
+
     logger.info(f"Health endpoint: http://{_config.server_host}:{_config.server_port}/health")
-    logger.info("Authentication: ENABLED (use Authorization: Bearer <key> or X-API-Key: <key>)")
-    
-    # Create app with authentication
-    app = create_authenticated_sse_app(_config.mcp_api_key)
-    
-    # Run with uvicorn
-    # forwarded_allow_ips="*" allows proxy headers from any source
-    # proxy_headers=True enables processing of X-Forwarded-* headers
+    logger.info("Authentication: ENABLED")
+
     uvicorn.run(
         app,
         host=_config.server_host,
@@ -321,8 +354,8 @@ def main():
     - stdio (default): For local MCP clients
     - sse: For network access via HTTP
     """
-    if _config.transport == "sse":
-        run_sse_server()
+    if _config.transport in ("sse", "streamable-http"):
+        run_http_server()
     else:
         # Default to stdio transport
         mcp.run()
